@@ -1,0 +1,95 @@
+#include <ESP8266WiFi.h>
+#include <ThingSpeak.h>
+#include <DHT.h>
+
+#define DHTPIN D4         // Pin for DHT11
+#define DHTTYPE DHT11     // DHT11 Sensor Type
+DHT dht(DHTPIN, DHTTYPE);
+
+const int mq135AnalogPin = A0;  // Analog output pin for MQ135
+const int mq135DigitalPin = D3;  // Digital output pin for MQ135
+
+const char* ssid = "HOTSUPPORT";  // WiFi SSID
+const char* password = "Emilia@143";  // WiFi password
+
+unsigned long myChannelNumber = 2686327;  // Channel number
+const char* myWriteAPIKey = "G9SSGDW83GLDGCR8";  // ThingSpeak Write API Key
+
+WiFiClient client;
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();  // Initialize DHT11 sensor
+  pinMode(mq135DigitalPin, INPUT);  // Initialize MQ135 digital pin
+  
+  // Connect to WiFi
+  WiFi.begin(ssid, password);
+  Serial.println("Connecting to WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected");
+  
+  // Initialize ThingSpeak
+  ThingSpeak.begin(client);
+}
+
+void loop() {
+  delay(1000);  // Wait 1 second before reading values
+
+  // Read temperature and humidity from DHT11
+  float humidity = dht.readHumidity();  // Read humidity
+  float temperature = dht.readTemperature();  // Read temperature
+
+  // Check if DHT11 readings are valid
+  if (isnan(humidity) || isnan(temperature)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;  // Skip to the next loop iteration
+  } else {
+    Serial.print("Temperature: ");
+    Serial.print(temperature);
+    Serial.print(" °C, Humidity: ");
+    Serial.print(humidity);
+    Serial.print(" %, ");
+  }
+
+  // Read gas concentration from MQ135
+  int gasAnalogValue = analogRead(mq135AnalogPin);  // Read analog value
+  int gasDigitalValue = digitalRead(mq135DigitalPin);  // Read digital value
+
+  // Print gas sensor readings
+  Serial.print("Gas (Analog): ");
+  Serial.print(gasAnalogValue);
+  Serial.print(", Gas (Digital): ");
+
+  // Determine air quality based on the analog value
+  String airQuality;
+  
+  // Define threshold for air quality
+  int airQualityThreshold = 400; // Adjust this threshold value based on your calibration
+
+  if (gasAnalogValue < airQualityThreshold) {
+    airQuality = "Good"; // Good air quality
+  } else {
+    airQuality = "Poor"; // Poor air quality
+  }
+
+  Serial.println(airQuality);
+
+  // Send data to ThingSpeak
+  ThingSpeak.setField(1, temperature);
+  ThingSpeak.setField(2, humidity);
+  ThingSpeak.setField(3, gasAnalogValue);
+  ThingSpeak.setField(4, gasDigitalValue);
+  ThingSpeak.setField(5, (airQuality == "Good") ? 1 : 0); // 1 for Good, 0 for Poor
+
+  int x = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
+  if (x == 200) {
+    Serial.println("Data sent to ThingSpeak successfully");
+  } else {
+    Serial.println("Failed to send data to ThingSpeak");
+  }
+
+  delay(20000);  // Wait 20 seconds before the next update
+}
