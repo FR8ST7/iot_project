@@ -8,7 +8,7 @@ const char* password = "Emilia@143";
 
 // ThingSpeak API credentials
 unsigned long myChannelNumber = 2686327;
-const char* myWriteAPIKey = "93IQXSJP4R7M6OOO";
+const char* myWriteAPIKey = "W5UYI35870KS2YAF";
 
 // DHT11 Pin and Type
 #define DHTPIN D3
