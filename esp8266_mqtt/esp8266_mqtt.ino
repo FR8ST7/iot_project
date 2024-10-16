@@ -1,6 +1,7 @@
 #include <ESP8266WiFi.h>
 #include <DHT.h>
 #include <ThingSpeak.h>
+#include <PubSubClient.h>  // Include the PubSubClient library for MQTT
 
 // Define WiFi credentials
 const char* ssid = "HOTSUPPORT";
@@ -10,16 +11,18 @@ const char* password = "Emilia@143";
 unsigned long myChannelNumber = 2686327;
 const char* myWriteAPIKey = "H2ECAIHFVLT81JFU";
 
-// DHT11 Pin and Type
-#define DHTPIN D3
-#define DHTTYPE DHT11
-DHT dht(DHTPIN, DHTTYPE);
+// MQTT Broker and topic details
+const char* mqttServer = "broker.hivemq.com";  // Public MQTT broker (example: HiveMQ)
+const int mqttPort = 1883;
+const char* mqttTopic = "esp8266/sensors";     // MQTT topic to publish data
+
+WiFiClient espClient;
+PubSubClient mqttClient(espClient);  // Initialize MQTT client
+DHT dht(D3, DHT11);  // DHT11 Pin and Type
 
 // Pin definitions for MQ2 and MQ135
 int mq2DigitalPin = D1;  // MQ2 digital output
 int mq135DigitalPin = D2;  // MQ135 digital output
-
-WiFiClient client;
 
 void setup() {
   Serial.begin(115200);
@@ -34,12 +37,37 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
-  Serial.println();
-  Serial.println("Wi-Fi connected");
-  ThingSpeak.begin(client);  // Initialize ThingSpeak
+  Serial.println("\nWi-Fi connected");
+
+  // Initialize ThingSpeak
+  ThingSpeak.begin(espClient);
+
+  // Initialize MQTT
+  mqttClient.setServer(mqttServer, mqttPort);
+  connectToMQTT();
+}
+
+// Function to connect to MQTT
+void connectToMQTT() {
+  while (!mqttClient.connected()) {
+    Serial.print("Connecting to MQTT...");
+    if (mqttClient.connect("ESP8266Client")) {  // Client ID
+      Serial.println("connected");
+    } else {
+      Serial.print("failed with state ");
+      Serial.println(mqttClient.state());
+      delay(2000);  // Wait before retrying
+    }
+  }
 }
 
 void loop() {
+  // Ensure the MQTT connection is maintained
+  if (!mqttClient.connected()) {
+    connectToMQTT();
+  }
+  mqttClient.loop();  // Keep the MQTT client alive
+
   // Reading MQ2 analog value and converting to gas concentration
   int mq2AnalogValue = analogRead(A0);
   float mq2GasPPM = 1000 * (mq2AnalogValue / 1023.0);
@@ -112,11 +140,24 @@ void loop() {
   // Write the data to ThingSpeak
   int responseCode = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
 
-  // Check if data was sent successfully
+  // Check if data was sent successfully to ThingSpeak
   if (responseCode == 200) {
     Serial.println("Data successfully sent to ThingSpeak");
   } else {
     Serial.println("Problem sending data to ThingSpeak. HTTP error code: " + String(responseCode));
+  }
+
+  // Create JSON payload for MQTT
+  String payload = "{";
+  payload += "\"methanePPM\":" + String(methanePPM) + ",";
+  payload += "\"foodStatus\":\"" + foodStatus + "\"";  // Include only food status
+  payload += "}";
+
+  // Publish data to the MQTT broker
+  if (mqttClient.publish(mqttTopic, payload.c_str())) {
+    Serial.println("Data successfully sent to MQTT");
+  } else {
+    Serial.println("Failed to send data to MQTT");
   }
 
   delay(20000);  // Wait 20 seconds before the next loop iteration
