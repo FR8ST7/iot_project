@@ -106,7 +106,7 @@ void loop() {
   Serial.print("Humidity: "); Serial.println(humidity);
 
   String foodStatus;
-  bool isSpoiled = (methanePPM > 300.18 || co2PPM > 170.1 || nh3PPM > 90.3 || humidity > 50.5);
+  bool isSpoiled = (methanePPM > 300.18 || co2PPM > 300.1 || nh3PPM > 200.3 || humidity > 50.5);
 
   if (isSpoiled) {
     foodStatus = "Spoiled";
